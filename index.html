@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Loadmaster: Smooth Drag</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="theme-color" content="#1f2937">
+    <style>
+        body {
+            font-family: sans-serif;
+            line-height: 1.4;
+            font-size: 0.9em;
+            background-color: #111827;
+            color: #f3f4f6;
+            overscroll-behavior: none;
+            touch-action: pan-y;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+
+        h1 {
+            font-size: 1.8em;
+            margin-bottom: 15px;
+            color: #2dd4bf;
+            text-align: center;
+            font-weight: 800;
+        }
+
+        h2 {
+            font-size: 1.2em;
+            margin: 15px 0 10px 0;
+            border-bottom: 1px solid #374151;
+            padding-bottom: 7px;
+            color: #e5e7eb;
+        }
+
+        input,
+        select {
+            padding: 12px;
+            margin: 5px 0 10px 0;
+            border: 1px solid #4b5563;
+            border-radius: 8px;
+            background: #374151;
+            color: #f3f4f6;
+            width: 100%;
+            display: block;
+            font-size: 16px;
+        }
+
+        button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 5px 5px 5px 0;
+            font-weight: 600;
+            background: #10b981;
+            color: white;
+            touch-action: manipulation;
+        }
+
+        button:active {
+            transform: scale(0.96);
+        }
+
+        button.secondary {
+            background: #4b5563;
+            color: #d1d5db;
+        }
+
+        .delete-btn {
+            background: #ef4444;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            padding: 0;
+        }
+
+        .tab-buttons {
+            display: flex;
+            gap: 5px;
+            overflow-x: auto;
+            margin-bottom: 15px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            background: #374151;
+            color: #9ca3af;
+            padding: 12px;
+            border-radius: 8px;
+            min-width: 80px;
+        }
+
+        .tab-btn.active-tab {
+            background: #2dd4bf;
+            color: #111827;
+            font-weight: bold;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .list-item-container {
+            background: #1f2937;
+            padding: 12px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            border-left: 4px solid #34d399;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .viz-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-top: 10px;
+            background: #0f172a;
+            padding: 10px;
+            border-radius: 10px;
+            border: 1px solid #334155;
+        }
+
+        svg {
+            background: #1e293b;
+            border-radius: 4px;
+            width: 100%;
+            touch-action: none;
+            cursor: crosshair;
+        }
+
+        rect {
+            stroke: #334155;
+            stroke-width: 1;
+            transition: stroke 0.1s;
+        }
+
+        rect.item-rect {
+            cursor: grab;
+        }
+
+        rect.item-rect:active {
+            cursor: grabbing;
+        }
+
+        rect.selected {
+            stroke: #fff;
+            stroke-width: 2;
+            stroke-dasharray: 4;
+            filter: drop-shadow(0 0 2px cyan);
+        }
+
+        text {
+            fill: white;
+            font-size: 10px;
+            pointer-events: none;
+            font-weight: bold;
+            text-shadow: 0 1px 2px black;
+            /* Prevent text selection */
+            user-select: none;
+        }
+
+        .flex-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #10b981;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 30px;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 2000;
+            transition: opacity 0.3s;
+            font-weight: bold;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+
+        #toast.show {
+            opacity: 1;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-900 text-gray-100" onload="init()">
+    <div class="container">
+        <h1>Loadmaster Pro</h1>
+
+        <div class="tab-buttons">
+            <button class="tab-btn active-tab" onclick="switchTab('main')">Plan</button>
+            <button class="tab-btn" onclick="switchTab('customers')">Cust</button>
+            <button class="tab-btn" onclick="switchTab('library')">Items</button>
+            <button class="tab-btn" onclick="switchTab('trailers')">Trucks</button>
+            <button class="tab-btn" onclick="switchTab('saved')">Save</button>
+        </div>
+
+        <div id="main-tab" class="tab-content active">
+            <h2 id="current-trailer-header" class="text-sm text-teal-500 font-bold uppercase tracking-wider">Trailer
+                Layout</h2>
+
+            <div class="viz-container">
+                <div>
+                    <div class="flex justify-between text-xs text-gray-400 uppercase font-bold mb-1">
+                        <span>Nose</span><span>Top View</span><span>Door</span>
+                    </div>
+                    <svg id="top-viz" height="120"></svg>
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-xs text-gray-400 uppercase font-bold mb-1">
+                        <span>Height Check</span><span>Side View</span>
+                    </div>
+                    <svg id="side-viz" height="120"></svg>
+                </div>
+
+                <div id="item-controls" class="hidden bg-gray-800 p-3 rounded border border-teal-900">
+                    <div class="flex justify-between items-center">
+                        <span id="selected-item-name" class="font-bold text-teal-400">Item</span>
+                        <button class="bg-red-600 text-xs py-1 px-3" onclick="deleteSelectedPlanItem()">Remove</button>
+                    </div>
+                    <div class="text-xs text-gray-400 mt-1">Drag to move. It automatically saves.</div>
+                </div>
+            </div>
+
+            <div class="bg-gray-800 p-4 rounded-lg mt-4 border border-gray-700">
+                <h4 class="font-bold mb-2 text-teal-400">Add Cargo</h4>
+                <div class="flex-row">
+                    <select id="customer-select" class="flex-1">
+                        <option value="">Customer...</option>
+                    </select>
+                </div>
+                <div class="flex-row mt-2">
+                    <select id="item-select" class="flex-1">
+                        <option value="">Item...</option>
+                    </select>
+                </div>
+                <button class="w-full mt-3 py-3 text-lg" onclick="loadItemToTrailer()">+ LOAD ITEM</button>
+            </div>
+
+            <div class="mt-4 p-4 bg-gray-800 rounded-lg border border-gray-700">
+                <div id="load-summary" class="text-sm font-mono">Empty.</div>
+                <button class="secondary w-full mt-2" onclick="clearLoad()">Clear Trailer</button>
+            </div>
+        </div>
+
+        <div id="customers-tab" class="tab-content">
+            <h2>Customers</h2>
+            <div class="flex-row">
+                <input type="text" id="new-cust-name" placeholder="Name" class="flex-1">
+                <button onclick="addCustomer()">Add</button>
+            </div>
+            <div id="customer-list" class="mt-4"></div>
+        </div>
+
+        <div id="library-tab" class="tab-content">
+            <h2>Item Library</h2>
+            <div class="bg-gray-800 p-3 rounded-lg mb-4">
+                <input type="text" id="lib-name" placeholder="Item Name">
+                <div class="flex-row">
+                    <input type="number" id="lib-l" placeholder="L (in)">
+                    <input type="number" id="lib-w" placeholder="W (in)">
+                </div>
+                <div class="flex-row">
+                    <input type="number" id="lib-h" placeholder="H (in)">
+                    <input type="number" id="lib-wt" placeholder="Lbs">
+                </div>
+                <input type="color" id="lib-color" value="#10b981" style="height:40px; padding:2px;">
+                <button class="w-full mt-2" onclick="addLibItem()">Save Item</button>
+            </div>
+            <div id="library-list"></div>
+        </div>
+
+        <div id="trailers-tab" class="tab-content">
+            <h2>Trailers</h2>
+            <div class="bg-gray-800 p-3 rounded-lg mb-4">
+                <input type="text" id="trailer-name" placeholder="Trailer Name">
+                <div class="flex-row">
+                    <input type="number" id="trailer-l" placeholder="Length (in)">
+                    <input type="number" id="trailer-w" placeholder="Width (in)">
+                    <input type="number" id="trailer-h" placeholder="Height (in)">
+                </div>
+                <button class="w-full mt-2" onclick="addTrailer()">Save Trailer</button>
+            </div>
+            <div id="trailer-list"></div>
+        </div>
+
+        <div id="saved-tab" class="tab-content">
+            <h2>Settings</h2>
+            <button class="bg-red-600 w-full py-4" onclick="hardReset()">FACTORY RESET APP</button>
+            <button class="bg-teal-600 w-full py-4 mt-4" onclick="saveLoad()">SAVE LOAD</button>
+            <input type="file" id="file-input" accept=".json" style="display: none;" onchange="loadFile(this)">
+            <button class="bg-blue-600 w-full py-4 mt-4"
+                onclick="document.getElementById('file-input').click()">LOAD LOAD</button>
+            <p class="text-xs mt-2 text-gray-500">
+                Save files can be manually uploaded to iCloud Drive via the Files app (iOS) or Finder (macOS).
+            </p>
+        </div>
+
+        <div id="toast">Item Loaded</div>
+    </div>
+    <script>
+        // --- CORE STATE ---
+        const DATA_KEY = 'lm_pro_v2';
+        const SAVED_LOADS_KEY = 'lm_pro_saved_loads';
+
+        let data = {
+            customers: [],
+            library: [],
+            trailers: [{
+                id: 1,
+                name: "Standard 53'",
+                l: 636,
+                w: 102,
+                h: 110
+            }],
+            activeTrailerId: 1,
+            loadPlan: []
+        };
+
+        let selectedPlanItemUID = null;
+        let dragItem = null;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+        let dragView = null;
+
+        // --- INIT ---
+        function init() {
+            const saved = localStorage.getItem(DATA_KEY);
+            if (saved) {
+                data = JSON.parse(saved);
+            }
+            renderAll();
+            setupDragEvents();
+        }
+
+        function saveData() {
+            localStorage.setItem(DATA_KEY, JSON.stringify(data));
+            renderViz();
+            updateStats();
+        }
+
+        function renderAll() {
+            renderCustomers();
+            renderLibrary();
+            renderTrailers();
+            renderDropdowns();
+            renderViz();
+            updateStats();
+        }
+
+        // --- TABS ---
+        function switchTab(id) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active-tab'));
+            document.getElementById(id + '-tab').classList.add('active');
+
+            const btns = document.querySelectorAll('.tab-btn');
+            if (id === 'main') btns[0].classList.add('active-tab');
+            if (id === 'customers') btns[1].classList.add('active-tab');
+            if (id === 'library') btns[2].classList.add('active-tab');
+            if (id === 'trailers') btns[3].classList.add('active-tab');
+            if (id === 'saved') btns[4].classList.add('active-tab');
+        }
+
+        // --- DATA LOGIC ---
+        function addCustomer() {
+            console.log("addCustomer function called"); // Debugging log
+
+            const name = document.getElementById('new-cust-name').value.trim();
+            if (!name) return toast("Name required", true);
+
+            const newCustomer = {
+                id: Date.now(),
+                name: name
+            };
+
+            data.customers.push(newCustomer);
+            document.getElementById('new-cust-name').value = "";
+            saveData();
+            renderCustomers();
+            renderDropdowns();
+            toast("Customer Added");
+        }
+
+        function deleteCustomer(id) {
+            if (!confirm("Remove?")) return;
+            data.customers = data.customers.filter(c => c.id !== id);
+            saveData();
+            renderCustomers();
+            renderDropdowns();
+        }
+
+        function renderCustomers() {
+            const customerListDiv = document.getElementById('customer-list');
+            customerListDiv.innerHTML = data.customers.map(c => `
+          <div class="list-item-container">
+            <span>${c.name}</span>
+            <button class="delete-btn" onclick="deleteCustomer(${c.id})">&times;</button>
+          </div>
+        `).join('');
+        }
+
+        function addLibItem() {
+            const name = document.getElementById('lib-name').value;
+            const l = parseFloat(document.getElementById('lib-l').value) || 48;
+            const w = parseFloat(document.getElementById('lib-w').value) || 40;
+            const h = parseFloat(document.getElementById('lib-h').value) || 48;
+            const wt = parseFloat(document.getElementById('lib-wt').value) || 1000;
+            const color = document.getElementById('lib-color').value;
+            if (!name) return toast("Name required", true);
+            data.library.push({
+                id: Date.now(),
+                name,
+                l,
+                w,
+                h,
+                wt,
+                color
+            });
+            saveData();
+            renderLibrary();
+            renderDropdowns();
+            toast("Item Saved");
+        }
+
+        function deleteLibItem(id) {
+            if (!confirm("Delete?")) return;
+            data.library = data.library.filter(i => i.id !== id);
+            saveData();
+            renderLibrary();
+            renderDropdowns();
+        }
+
+        function renderLibrary() {
+            document.getElementById('library-list').innerHTML = data.library.sort((a, b) => a.name.localeCompare(b.name)).map(i => `
+          <div class="list-item-container" style="border-left-color:${i.color}">
+            <div><strong>${i.name}</strong><br><span class="text-xs text-gray-400">${i.l}x${i.w}x${i.h}" |
+                ${i.wt}lbs</span></div>
+            <button class="delete-btn" onclick="deleteLibItem(${i.id})">&times;</button>
+          </div>
+        `).join('');
+        }
+
+        function addTrailer() {
+            const name = document.getElementById('trailer-name').value;
+            const l = parseFloat(document.getElementById('trailer-l').value);
+            const w = parseFloat(document.getElementById('trailer-w').value);
+            const h = parseFloat(document.getElementById('trailer-h').value);
+            if (!name) return toast("Name required", true);
+            const id = Date.now();
+            data.trailers.push({
+                id,
+                name,
+                l,
+                w,
+                h
+            });
+            data.activeTrailerId = id;
+            saveData();
+            renderTrailers();
+            toast("Trailer Added");
+        }
+
+        function selectTrailer(id) {
+            data.activeTrailerId = id;
+            saveData();
+            renderTrailers();
+            renderViz();
+            toast("Trailer Selected");
+        }
+
+        function deleteTrailer(id) {
+            if (data.trailers.length <= 1) return;
+            data.trailers = data.trailers.filter(t => t.id !== id);
+            if (data.activeTrailerId === id) data.activeTrailerId = data.trailers[0].id;
+            saveData();
+            renderTrailers();
+        }
+
+        function renderTrailers() {
+            document.getElementById('trailer-list').innerHTML = data.trailers.map(t => `
+          <div class="list-item-container ${t.id === data.activeTrailerId ? 'bg-gray-700 border-2 border-teal-500' : ''}">
+            <div onclick="selectTrailer(${t.id})" class="flex-1"><strong>${t.name}</strong>
+              <div class="text-xs">${t.l}x${t.w}x${t.h}"</div>
+            </div>
+            <button class="delete-btn" onclick="deleteTrailer(${t.id})">&times;</button>
+          </div>
+        `).join('');
+        }
+
+        function renderDropdowns() {
+            const cSelect = document.getElementById('customer-select');
+            const iSelect = document.getElementById('item-select');
+            cSelect.innerHTML = '<option value="">Select Customer</option>' + data.customers.map(c => `
+          <option value="${c.id}">${c.name}</option>
+        `).join('');
+            iSelect.innerHTML = '<option value="">Select Item</option>' + data.library.map(i => `
+          <option value="${i.id}">${i.name}</option>
+        `).join('');
+        }
+
+        // --- LOAD LOGIC ---
+        function getActiveTrailer() {
+            return data.trailers.find(t => t.id === data.activeTrailerId) || data.trailers[0];
+        }
+
+        function loadItemToTrailer() {
+            const custId = parseInt(document.getElementById('customer-select').value);
+            const libId = parseInt(document.getElementById('item-select').value);
+            if (!custId || !libId) return toast("Select Customer & Item", true);
+
+            const template = data.library.find(i => i.id === libId);
+            const trailer = getActiveTrailer();
+
+            let x = 0;
+            data.loadPlan.forEach(p => {
+                if (p.x + p.l > x) x = p.x + p.l;
+            });
+            if (x + template.l > trailer.l) x = 0;
+
+            data.loadPlan.push({
+                uid: Date.now(),
+                name: template.name,
+                l: template.l,
+                w: template.w,
+                h: template.h,
+                wt: template.wt,
+                color: template.color,
+                x: x,
+                y: 0,
+                z: 0,
+                customerId: custId, // Store customer ID with the item!
+                itemId: libId
+            });
+            saveData();
+            toast("Item Loaded");
+        }
+
+        function clearLoad() {
+            if (confirm("Clear all items?")) {
+                data.loadPlan = [];
+                saveData();
+            }
+        }
+
+        function updateStats() {
+            const wt = data.loadPlan.reduce((s, p) => s + p.wt, 0);
+            const count = data.loadPlan.length;
+            document.getElementById('load-summary').innerText = `${count} items | ${wt} lbs Total`;
+        }
+
+        function deleteSelectedPlanItem() {
+            if (!selectedPlanItemUID) return;
+            data.loadPlan = data.loadPlan.filter(p => p.uid !== selectedPlanItemUID);
+            selectedPlanItemUID = null;
+            document.getElementById('item-controls').classList.add('hidden');
+            saveData();
+        }
+
+        // --- VISUALIZER & DRAG ENGINE ---
+        function renderViz() {
+            const t = getActiveTrailer();
+            const topSvg = document.getElementById('top-viz');
+            const sideSvg = document.getElementById('side-viz');
+
+            const svgW = topSvg.clientWidth || 600;
+            const scale = svgW / t.l;
+
+            topSvg.setAttribute("height", t.w * scale);
+            sideSvg.setAttribute("height", t.h * scale);
+
+            let topHTML =
+                `<rect x="0" y="0" width="${t.l * scale}" height="${t.w * scale}" fill="#1f2937" stroke="cyan" stroke-width="2" />`;
+            let sideHTML =
+                `<rect x="0" y="0" width="${t.l * scale}" height="${t.h * scale}" fill="#1f2937" stroke="cyan" stroke-width="2" />`;
+
+            data.loadPlan.forEach(p => {
+                const stroke = (p.uid === selectedPlanItemUID) ? 'white' : 'black';
+                const strokeW = (p.uid === selectedPlanItemUID) ? 3 : 1;
+
+                // Retrieve customer and item names:
+                const customer = data.customers.find(c => c.id === p.customerId);
+                const itemName = p.name; // Already have item name.
+
+                const customerName = customer ? customer.name : "Unknown"; // Handle case if customer is not found
+
+                topHTML += `
+            <g class="draggable" data-uid="${p.uid}" data-view="top">
+              <rect x="${p.x * scale}" y="${p.z * scale}" width="${p.l * scale}" height="${p.w * scale}"
+                fill="${p.color}" stroke="${stroke}" stroke-width="${strokeW}" opacity="0.9" class="item-rect" />
+              <text
+                x="${(p.x * scale) + (p.l * scale) / 2}"
+                y="${(p.z * scale) + (p.w * scale) / 4}" // Adjust for customer name
+                text-anchor="middle"
+                dominant-baseline="middle"
+                font-size="${8 * scale}"
+                >
+                ${customerName}
+              </text>
+              <text
+                x="${(p.x * scale) + (p.l * scale) / 2}"
+                y="${(p.z * scale) + (3 * p.w * scale) / 4}" // Adjust for item name position
+                text-anchor="middle"
+                dominant-baseline="middle"
+                font-size="${8 * scale}"
+                >
+                ${itemName}
+              </text>
+            </g>
+          `;
+
+                const svgY = (t.h - p.y - p.h) * scale;
+                sideHTML += `
+            <g class="draggable" data-uid="${p.uid}" data-view="side">
+              <rect x="${p.x * scale}" y="${svgY}" width="${p.l * scale}" height="${p.h * scale}"
+                fill="${p.color}" stroke="${stroke}" stroke-width="${strokeW}" opacity="0.9" class="item-rect" />
+              <text
+                x="${(p.x * scale) + (p.l * scale) / 2}"
+                y="${svgY + (p.h * scale) / 4}" //Adjust for customer name
+                text-anchor="middle"
+                dominant-baseline="middle"
+                font-size="${8 * scale}"
+                >
+                ${customerName}
+              </text>
+              <text
+                x="${(p.x * scale) + (p.l * scale) / 2}"
+                y="${svgY + (3 * p.h * scale) / 4}" //Adjust for item name
+                text-anchor="middle"
+                dominant-baseline="middle"
+                font-size="${8 * scale}"
+                >
+                ${itemName}
+              </text>
+            </g>
+          `;
+            });
+
+            topSvg.innerHTML = topHTML;
+            sideSvg.innerHTML = sideHTML;
+        }
+
+        function setupDragEvents() {
+            const topViz = document.getElementById('top-viz');
+            const sideViz = document.getElementById('side-viz');
+
+            topViz.addEventListener('touchstart', handleDragStart, {
+                passive: false
+            });
+            sideViz.addEventListener('touchstart', handleDragStart, {
+                passive: false
+            });
+            window.addEventListener('touchmove', handleDragMove, {
+                passive: false
+            });
+            window.addEventListener('touchend', handleDragEnd);
+
+            topViz.addEventListener('mousedown', handleDragStart);
+            sideViz.addEventListener('mousedown', handleDragStart);
+            window.addEventListener('mousemove', handleDragMove);
+            window.addEventListener('mouseup', handleDragEnd);
+        }
+
+        function handleDragStart(e) {
+            const target = e.target.closest('.draggable');
+            if (!target) {
+                selectedPlanItemUID = null;
+                document.getElementById('item-controls').classList.add('hidden');
+                renderViz();
+                return;
+            }
+
+            e.preventDefault();
+            const uid = parseInt(target.dataset.uid);
+            selectedPlanItemUID = uid;
+            dragItem = data.loadPlan.find(p => p.uid === uid);
+            dragView = target.dataset.view;
+
+            document.getElementById('item-controls').classList.remove('hidden');
+            document.getElementById('selected-item-name').innerText = dragItem.name;
+
+            const svgId = (dragView === 'top') ? 'top-viz' : 'side-viz';
+            const svgRect = document.getElementById(svgId).getBoundingClientRect();
+            const t = getActiveTrailer();
+            const scale = svgRect.width / t.l;
+
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            dragOffsetX = (clientX - svgRect.left) - (dragItem.x * scale);
+
+            if (dragView === 'top') {
+                dragOffsetY = (clientY - svgRect.top) - (dragItem.z * scale);
+            } else {
+                const svgY = (t.h - dragItem.y - dragItem.h) * scale;
+                dragOffsetY = (clientY - svgRect.top) - svgY;
+            }
+
+            renderViz();
+        }
+
+        function handleDragMove(e) {
+            if (!dragItem) return;
+            e.preventDefault();
+
+            const svgId = (dragView === 'top') ? 'top-viz' : 'side-viz';
+            const svgRect = document.getElementById(svgId).getBoundingClientRect();
+            const t = getActiveTrailer();
+            const scale = svgRect.width / t.l;
+
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            let rawX = clientX - svgRect.left - dragOffsetX;
+            let rawY = clientY - svgRect.top - dragOffsetY;
+
+            let newX = rawX / scale;
+
+            if (dragView === 'top') {
+                let newZ = rawY / scale;
+                if (newX < 0) newX = 0;
+                if (newX + dragItem.l > t.l) newX = t.l - dragItem.l;
+                if (newZ < 0) newZ = 0;
+                if (newZ + dragItem.w > t.w) newZ = t.w - dragItem.w;
+                dragItem.x = newX;
+                dragItem.z = newZ;
+
+            } else {
+                let newY = t.h - (rawY / scale) - dragItem.h;
+
+                if (newX < 0) newX = 0;
+                if (newX + dragItem.l > t.l) newX = t.l - dragItem.l;
+                if (newY < 0) newY = 0;
+                if (newY + dragItem.h > t.h) newY = t.h - dragItem.h;
+
+                dragItem.x = newX;
+                dragItem.y = newY;
+            }
+            saveData();
+            renderViz();
+        }
+
+        function handleDragEnd() {
+            dragItem = null;
+        }
+
+        function hardReset() {
+            if (confirm("ERASE ALL DATA?")) {
+                localStorage.removeItem(DATA_KEY);
+                data = {
+                    customers: [],
+                    library: [],
+                    trailers: [{
+                        id: 1,
+                        name: "Standard 53'",
+                        l: 636,
+                        w: 102,
+                        h: 110
+                    }],
+                    activeTrailerId: 1,
+                    loadPlan: []
+                };
+                renderAll();
+            }
+        }
+
+        function saveLoad() {
+            const filename = prompt("Save As:", "my_load_plan.json");
+            if (!filename) return;
+            const json = JSON.stringify(data);
+            const blob = new Blob([json], {
+                type: 'application/json'
+            });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function loadFile(input) {
+            const file = input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                try {
+                    data = JSON.parse(e.target.result);
+                    saveData();
+                    renderAll();
+                    toast("Load Imported");
+                } catch (err) {
+                    alert("ERROR: Invalid Save File");
+                }
+            }
+            reader.readAsText(file);
+        }
+
+        // --- UTILITY ---
+        function toast(msg, error) {
+            const toast = document.getElementById('toast');
+            toast.innerText = msg;
+            toast.style.background = error ? '#dc2626' : '#10b981';
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+    </script>
+</body>
+
+</html>
