@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Loadmaster Pro 3D</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/DragControls.js"></script>
+
+    <style>
+        body { font-family: sans-serif; background-color: #111827; color: #f3f4f6; overscroll-behavior: none; padding-bottom: 50px; }
+        .container { max-width: 1000px; margin: 0 auto; padding: 1rem; }
+        
+        /* 3D HEIGHT 35vh */
+        #canvas-container {
+            width: 100%; height: 35vh; 
+            background: #000; border-radius: 12px; overflow: hidden;
+            border: 2px solid #22c55e; position: relative; margin-bottom: 10px;
+        }
+
+        .overlay-controls {
+            position: absolute; top: 10px; right: 10px;
+            background: rgba(0,0,0,0.7); padding: 5px; border-radius: 8px; pointer-events: none;
+        }
+        .overlay-text { font-size: 10px; color: #aaa; }
+
+        /* 2D Views */
+        .viz-container { 
+            background: #0f172a; padding: 10px; border-radius: 10px; 
+            border: 1px solid #334155; margin-top: 10px; 
+        }
+        
+        svg { background: #1e293b; border-radius: 4px; display: block; width: 100%; touch-action: none; }
+        
+        /* Draggable Items */
+        .draggable-group { cursor: grab; }
+        .draggable-group:active { cursor: grabbing; }
+        .draggable-group rect { stroke: #334155; stroke-width: 1; shape-rendering: crispEdges; }
+        .draggable-group.selected rect { stroke: white; stroke-width: 2; fill-opacity: 1; }
+
+        /* Red X Button */
+        .delete-x-bg { fill: #ef4444; stroke: none; cursor: pointer; }
+        .delete-x-text { fill: white; font-weight: bold; font-family: sans-serif; pointer-events: none; text-anchor: middle; dominant-baseline: middle; }
+
+        text { fill: white; font-size: 10px; pointer-events: none; font-weight: bold; text-shadow: 0 1px 2px black; }
+        .dim-text { fill: #22c55e; font-size: 12px; font-weight: bold; }
+
+        /* UI */
+        input, select { padding: 12px; margin: 5px 0; border: 1px solid #4b5563; border-radius: 6px; background: #374151; color: white; width: 100%; }
+        button { padding: 12px 16px; border: none; border-radius: 6px; cursor: pointer; background: #10b981; color: white; margin-top:5px; font-weight: bold;}
+        
+        .tab-btn { flex: 1; background: #374151; color: #9ca3af; padding: 12px; border-radius: 8px; margin-right: 5px; font-size: 14px;}
+        .tab-btn.active-tab { background: #22c55e; color: #ffffff; font-weight: bold; }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        .list-item { background: #1f2937; padding: 12px; margin-bottom: 8px; border-radius: 6px; border-left: 5px solid #34d399; display: flex; justify-content: space-between; align-items: center;}
+        .delete-btn { background: #ef4444; color: white; border-radius: 4px; padding: 5px 15px; font-size: 12px; font-weight: bold; margin-left: 10px; cursor: pointer;}
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1 class="text-xl font-bold text-green-500 text-center mb-4">Loadmaster Pro 3D</h1>
+
+    <div class="flex overflow-x-auto mb-4">
+        <button class="tab-btn active-tab" onclick="switchTab('main')">Plan</button>
+        <button class="tab-btn" onclick="switchTab('customers')">Cust</button>
+        <button class="tab-btn" onclick="switchTab('library')">Items</button>
+        <button class="tab-btn" onclick="switchTab('trailers')">Trail</button>
+        <button class="tab-btn" onclick="switchTab('settings')">Save</button>
+    </div>
+
+    <div id="main-tab" class="tab-content active">
+        <div id="canvas-container">
+            <div class="overlay-controls">
+                <div class="overlay-text text-green-400 font-bold">3D View</div>
+                <div class="overlay-text">Drag boxes to move | 2 Fingers to Rotate</div>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 p-4 rounded-lg mt-2 border border-gray-700">
+            <div class="flex gap-2">
+                <select id="cust-select" class="flex-1"><option>Select Customer...</option></select>
+                <select id="item-select" class="flex-1"><option>Select Item...</option></select>
+            </div>
+            <button class="w-full text-lg shadow-lg" onclick="addLoad()">+ LOAD ITEM</button>
+        </div>
+        
+        <div class="mt-2 text-center text-xs text-gray-500" id="load-summary">0 items</div>
+
+        <div class="viz-container mt-4">
+            <div class="mb-4">
+                <div class="flex justify-between text-xs text-gray-400 uppercase font-bold mb-1">
+                    <span>Nose</span><span>Top View (Drag to Move)</span><span>Door</span>
+                </div>
+                <svg id="top-viz" height="100"></svg>
+            </div>
+            <div>
+                <div class="flex justify-between text-xs text-gray-400 uppercase font-bold mb-1">
+                    <span>Height Check</span><span class="text-green-400">Side View (Stacking)</span>
+                </div>
+                <svg id="side-viz" height="100"></svg>
+            </div>
+        </div>
+    </div>
+
+    <div id="customers-tab" class="tab-content">
+        <h2 class="text-lg mb-2 text-green-500 border-b border-gray-700">Customers</h2>
+        <div class="flex gap-2"><input id="c-name" placeholder="Customer Name"><button onclick="saveCustomer()">Add</button></div>
+        <div id="cust-list" class="mt-4"></div>
+    </div>
+
+    <div id="library-tab" class="tab-content">
+        <h2 class="text-lg mb-2 text-green-500 border-b border-gray-700">Item Library</h2>
+        <div class="bg-gray-800 p-3 rounded mb-4">
+            <input id="lib-name" placeholder="Item Name">
+            <div class="flex gap-2">
+                <input type="number" id="lib-l" placeholder="Length (in)">
+                <input type="number" id="lib-w" placeholder="Width (in)">
+            </div>
+            <div class="flex gap-2">
+                <input type="number" id="lib-h" placeholder="Height (in)">
+                <input type="number" id="lib-wt" placeholder="Weight (lbs)">
+            </div>
+            <input type="color" id="lib-color" value="#22c55e" class="h-10 w-full p-1 mt-2 rounded">
+            <button class="w-full" onclick="saveLibItem()">Save Item</button>
+        </div>
+        <div id="library-list"></div>
+    </div>
+
+    <div id="trailers-tab" class="tab-content">
+        <h2 class="text-lg mb-2 text-green-500 border-b border-gray-700">Trailers (Dimensions in Feet)</h2>
+        <div class="bg-gray-800 p-3 rounded mb-4">
+            <input id="t-name" placeholder="Trailer Name (e.g. Standard 53)">
+            <div class="flex gap-2">
+                <input type="number" id="t-l" placeholder="Length (Feet)">
+                <input type="number" id="t-w" placeholder="Width (Feet)">
+                <input type="number" id="t-h" placeholder="Height (Feet)">
+            </div>
+            <button class="w-full" onclick="saveTrailer()">Add Trailer</button>
+        </div>
+        <div id="trailer-list"></div>
+    </div>
+
+    <div id="settings-tab" class="tab-content">
+        <h2 class="text-lg mb-2 text-green-500 border-b border-gray-700">Data Management</h2>
+        <button class="bg-teal-600 w-full mb-4" onclick="exportData()">Export/Save File</button>
+        <input type="file" id="file-input" class="hidden" onchange="importData(this)">
+        <button class="bg-blue-600 w-full mb-8" onclick="document.getElementById('file-input').click()">Import/Load File</button>
+        <button class="bg-red-600 w-full" onclick="hardReset()">FACTORY RESET APP</button>
+    </div>
+</div>
+
+<script>
+    // === APP STATE ===
+    const KEY = "lm_final_v9";
+    let app = {
+        customers: [],
+        library: [],
+        trailers: [{id: 1, name: "Standard 53'", l: 636, w: 102, h: 110}], 
+        activeTrailer: 1,
+        load: []
+    };
+    let selectedUID = null;
+    
+    // 3D Globals
+    let scene, camera, renderer, orbit, dragControls;
+    let meshes = [], trailerMesh;
+    const SCALAR = 0.05; 
+    
+    // --- UPDATED: SNAP DISTANCE IS NOW 12 INCHES ---
+    const SNAP_GRID = 12; 
+
+    window.onload = function() {
+        if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(r => r.forEach(i => i.unregister()));
+        loadData();
+        renderUI();
+        init3D();
+        render2D();
+        setup2DDrag();
+    };
+
+    function switchTab(id) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active-tab'));
+        const btns = document.querySelectorAll('.tab-btn');
+        if(id === 'main') btns[0].classList.add('active-tab');
+        if(id === 'customers') btns[1].classList.add('active-tab');
+        if(id === 'library') btns[2].classList.add('active-tab');
+        if(id === 'trailers') btns[3].classList.add('active-tab');
+        if(id === 'settings') btns[4].classList.add('active-tab');
+        document.getElementById(id + '-tab').classList.add('active');
+        if(id === 'main') trigger3DResize();
+    }
+
+    // --- DATA ACTIONS ---
+    function addLoad() {
+        const cId = document.getElementById('cust-select').value;
+        const iId = document.getElementById('item-select').value;
+        if(cId === "Select Customer..." || iId === "Select Item...") return alert("Select Customer & Item");
+        const libItem = app.library.find(x => x.id == iId);
+        const t = app.trailers.find(x => x.id === app.activeTrailer);
+        let lastX = 0;
+        app.load.forEach(i => { if(i.x + i.l > lastX) lastX = i.x + i.l; });
+        const startX = (lastX + libItem.l <= t.l) ? lastX : 0;
+
+        app.load.push({
+            uid: Date.now(), name: libItem.name, l: libItem.l, w: libItem.w, h: libItem.h, wt: libItem.wt, color: libItem.color,
+            x: startX, y: 0, z: 0, cId: cId
+        });
+        
+        saveAndRender();
+    }
+
+    function deleteItem(uid) {
+        if(confirm("Delete this item?")) {
+            app.load = app.load.filter(i => i.uid !== uid);
+            selectedUID = null;
+            saveAndRender();
+        }
+    }
+    
+    // --- STORAGE ---
+    function saveLibItem() {
+        app.library.push({
+            id: Date.now(), name: document.getElementById('lib-name').value || "Item",
+            l: Number(document.getElementById('lib-l').value)||48, w: Number(document.getElementById('lib-w').value)||40, 
+            h: Number(document.getElementById('lib-h').value)||48, wt: Number(document.getElementById('lib-wt').value)||1000,
+            color: document.getElementById('lib-color').value
+        });
+        document.getElementById('lib-name').value = "";
+        saveAndRender(); alert("Item Saved");
+    }
+    function saveCustomer() { app.customers.push({id: Date.now(), name: document.getElementById('c-name').value}); document.getElementById('c-name').value = ""; saveAndRender(); }
+    function saveTrailer() {
+        const l_ft = Number(document.getElementById('t-l').value);
+        const w_ft = Number(document.getElementById('t-w').value);
+        const h_ft = Number(document.getElementById('t-h').value);
+        if(!l_ft || !w_ft || !h_ft) return alert("Please enter all dimensions in Feet");
+        const id = Date.now();
+        app.trailers.push({ id: id, name: document.getElementById('t-name').value || "Trailer", l: l_ft * 12, w: w_ft * 12, h: h_ft * 12 });
+        app.activeTrailer = id; saveAndRender(); alert("Trailer Added");
+    }
+
+    function deleteLib(id) { if(confirm("Delete Item?")) { app.library = app.library.filter(x => x.id !== id); saveAndRender(); } }
+    function deleteCust(id) { if(confirm("Delete Customer?")) { app.customers = app.customers.filter(x => x.id !== id); saveAndRender(); } }
+    function deleteTrailer(id) { if
