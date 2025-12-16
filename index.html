@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Loadmaster 3D Max View</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/DragControls.js"></script>
+
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #111827; color: #f3f4f6; overflow: hidden; height: 100vh; margin: 0; }
+        
+        /* Main Layout Grid */
+        .app-wrapper { display: flex; height: 100vh; width: 100vw; }
+        
+        /* Sidebars */
+        .sidebar { 
+            width: 120px; 
+            background: #1f2937; 
+            display: flex; 
+            flex-direction: column; 
+            padding: 10px; 
+            gap: 12px;
+            flex-shrink: 0;
+            border-right: 1px solid #374151;
+            z-index: 10;
+        }
+        .sidebar-right { border-left: 1px solid #374151; border-right: none; }
+
+        /* Center Content */
+        .main-content { 
+            flex: 1; 
+            display: flex; 
+            flex-direction: column; 
+            position: relative;
+            background: #000;
+        }
+
+        /* 3D Canvas - MAX SIZE */
+        #canvas-container {
+            flex-grow: 1; 
+            width: 100%;
+            background: #000; 
+            overflow: hidden;
+            position: relative;
+            border-bottom: 2px solid #374151;
+        }
+
+        /* Side Buttons */
+        .side-btn { 
+            padding: 15px 5px; 
+            font-size: 15px; 
+            font-weight: 700;
+            text-align: center; 
+            border-radius: 8px; 
+            background: #374151; 
+            color: #9ca3af; 
+            cursor: pointer; 
+            border: 2px solid #4b5563;
+            transition: 0.2s;
+            line-height: 1.3;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .side-btn:hover { background: #4b5563; transform: translateY(-2px); }
+        .side-btn:active { transform: translateY(0); }
+        .side-btn.active-tab { background: #22c55e; color: #ffffff; border-color: #4ade80; box-shadow: 0 0 10px rgba(34, 197, 94, 0.5); }
+        
+        /* Right Side Buttons Colors */
+        .btn-teal { background: #0f766e; border-color: #14b8a6; color: white; }
+        .btn-indigo { background: #4338ca; border-color: #6366f1; color: white; }
+        .btn-blue { background: #1d4ed8; border-color: #3b82f6; color: white; }
+        .btn-red { background: #b91c1c; border-color: #ef4444; color: white; }
+
+        /* Control Panel at Bottom */
+        .bottom-panel {
+            background: #1f2937;
+            padding: 10px;
+            border-top: 1px solid #374151;
+            flex-shrink: 0;
+        }
+
+        /* Form Elements */
+        input, select { padding: 8px; margin: 2px 0; border: 1px solid #4b5563; border-radius: 6px; background: #374151; color: white; width: 100%; font-size: 14px; }
+        .action-btn { padding: 10px; border-radius: 6px; cursor: pointer; background: #10b981; color: white; font-weight: bold; font-size: 14px; width: 100%; border:none; transition:0.2s;}
+        .action-btn:hover { background: #34d399; }
+
+        /* Tab Contents */
+        .tab-content { display: none; height: 100%; flex-direction: column; }
+        .tab-content.active { display: flex; }
+        
+        /* Inner Tab Scrolling (for lists) */
+        .scroll-area { flex: 1; overflow-y: auto; padding: 15px; }
+
+        .list-item { background: #111827; padding: 10px; margin-bottom: 8px; border-radius: 6px; border-left: 5px solid #34d399; display: flex; justify-content: space-between; align-items: center; font-size: 14px;}
+        .small-action-btn { padding: 5px 10px; font-size: 12px; border-radius: 4px; color: white; margin-left: 5px; cursor: pointer; border: none; font-weight: bold;}
+        
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div class="app-wrapper">
+    
+    <div class="sidebar">
+        <button class="side-btn active-tab" onclick="switchTab('main')">3D<br>PLAN</button>
+        <button class="side-btn" onclick="switchTab('customers')">CUST<br>LIST</button>
+        <button class="side-btn" onclick="switchTab('library')">ITEM<br>LIB</button>
+        <button class="side-btn" onclick="switchTab('trailers')">TRAIL<br>SIZE</button>
+    </div>
+
+    <div class="main-content">
+        
+        <div id="main-tab" class="tab-content active">
+            
+            <div id="canvas-container">
+                </div>
+
+            <div class="bottom-panel">
+                <div class="flex gap-2 mb-2">
+                    <select id="cust-select" class="flex-1"><option>Customer...</option></select>
+                    <select id="item-select" class="flex-1"><option>Item...</option></select>
+                </div>
+                <div class="flex gap-2">
+                    <input type="number" id="load-wt" placeholder="Weight (lbs)" style="flex:1;">
+                    <button class="action-btn" style="flex:2;" onclick="addLoad()">+ ADD TO LOAD</button>
+                </div>
+                <div class="mt-1 text-center text-xs text-gray-500" id="load-summary">0 items | 0 lbs</div>
+            </div>
+        </div>
+
+        <div id="customers-tab" class="tab-content">
+            <div class="bg-gray-800 p-4 border-b border-gray-700">
+                <h2 class="text-xl font-bold text-green-500 mb-2">Customer List</h2>
+                <input id="c-name" placeholder="Enter Customer Name" class="mb-2 p-3 text-lg">
+                <div class="flex gap-2">
+                    <button id="btn-save-cust" onclick="saveCustomer()" class="action-btn py-3">ADD CUSTOMER</button>
+                    <button id="btn-cancel-cust" onclick="cancelEditCust()" class="action-btn bg-gray-600 hidden">CANCEL</button>
+                </div>
+            </div>
+            <div class="scroll-area" id="cust-list"></div>
+        </div>
+
+        <div id="library-tab" class="tab-content">
+            <div class="bg-gray-800 p-4 border-b border-gray-700">
+                <h2 class="text-xl font-bold text-green-500 mb-2">Item Templates</h2>
+                <input id="lib-name" placeholder="Item Name" class="mb-2">
+                <div class="flex gap-2 mb-2">
+                    <input type="number" id="lib-l" placeholder="L (in)">
+                    <input type="number" id="lib-w" placeholder="W (in)">
+                    <input type="number" id="lib-h" placeholder="H (in)">
+                </div>
+                <input type="color" id="lib-color" value="#22c55e" class="h-10 w-full p-1 rounded cursor-pointer mb-2">
+                <div class="flex gap-2">
+                    <button id="btn-save-lib" class="action-btn" onclick="saveLibItem()">SAVE TEMPLATE</button>
+                    <button id="btn-cancel-lib" class="action-btn bg-gray-600 hidden" onclick="cancelEditLib()">CANCEL</button>
+                </div>
+            </div>
+            <div class="scroll-area" id="library-list"></div>
+        </div>
+
+        <div id="trailers-tab" class="tab-content">
+            <div class="bg-gray-800 p-4 border-b border-gray-700">
+                <h2 class="text-xl font-bold text-green-500 mb-2">Trailer Dimensions</h2>
+                <input id="t-name" placeholder="Trailer Name" class="mb-2">
+                <div class="flex gap-2 mb-2">
+                    <input type="number" id="t-l" placeholder="L (ft)">
+                    <input type="number" id="t-w" placeholder="W (ft)">
+                    <input type="number" id="t-h" placeholder="H (ft)">
+                </div>
+                <button class="action-btn" onclick="saveTrailer()">ADD TRAILER</button>
+            </div>
+            <div class="scroll-area" id="trailer-list"></div>
+        </div>
+    </div>
+
+    <div class="sidebar sidebar-right">
+        <button class="side-btn btn-teal" onclick="exportLoad()">SAVE<br>LOAD</button>
+        <button class="side-btn btn-indigo" onclick="exportCustomers()">SAVE<br>CUST</button>
+        
+        <input type="file" id="file-input" class="hidden" onchange="importData(this)">
+        <button class="side-btn btn-blue" onclick="document.getElementById('file-input').click()">IMPORT<br>FILE</button>
+        
+        <div id="side-delete-wrapper" class="hidden flex flex-col gap-1 mt-4 border-t border-gray-600 pt-4">
+            <div id="selected-label" class="text-xs text-center text-yellow-400 font-bold break-words">ITEM</div>
+            <button class="side-btn btn-red" style="border-color: #f87171;" onclick="deleteSelected()">DELETE<br>ITEM</button>
+        </div>
+        <div style="flex-grow:1"></div> <button class="side-btn btn-red" onclick="hardReset()">RESET<br>APP</button>
+    </div>
+
+</div>
+
+<script>
+    const KEY = "lm_max_view_v1"; 
+    let app = {
+        customers: [],
+        library: [],
+        trailers: [{id: 1, name: "Standard 53'", l: 636, w: 102, h: 110}], 
+        activeTrailer: 1,
+        load: []
+    };
+    let selectedUID = null;
+    let editingCustId = null;
+    let editingLibId = null;
+
+    let scene, camera, renderer, orbit, dragControls;
+    let meshes = [], trailerMesh, floorMesh;
+    const SCALAR = 0.05; 
+    const SNAP_GRID = 3; 
+    const SNAP_MAGNET = 12;
+
+    window.onload = function() {
+        loadData();
+        renderUI();
+        init3D();
+        // Force resize after load to fill flex container
+        setTimeout(trigger3DResize, 100);
+    };
+
+    function switchTab(id) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        // Reset active tabs on left sidebar
+        const leftBtns = document.querySelectorAll('.sidebar:first-child .side-btn');
+        leftBtns.forEach(b => b.classList.remove('active-tab'));
+
+        if(id === 'main') leftBtns[0].classList.add('active-tab');
+        if(id === 'customers') leftBtns[1].classList.add('active-tab');
+        if(id === 'library') leftBtns[2].classList.add('active-tab');
+        if(id === 'trailers') leftBtns[3].classList.add('active-tab');
+
+        document.getElementById(id + '-tab').classList.add('active');
+        if(id === 'main') setTimeout(trigger3DResize, 50);
+    }
+
+    // --- DATA LOGIC ---
+    function addLoad() {
+        const cId = document.getElementById('cust-select').value;
+        const iId = document.getElementById('item-select').value;
+        const weight = parseFloat(document.getElementById('load-wt').value) || 0; 
+
+        if(cId === "Customer..." || iId === "Item...") return alert("Select Customer & Item");
+        
+        const libItem = app.library.find(x => x.id == iId);
+        let lastX = 0;
+        app.load.forEach(i => { if(i.x + i.l > lastX) lastX = i.x + i.l; });
+        const startX = (lastX + libItem.l <= 636) ? lastX : 0;
+
+        app.load.push({
+            uid: Date.now(), name: libItem.name, l: libItem.l, w: libItem.w, h: libItem.h, wt: weight, color: libItem.color,
+            x: startX, y: 0, z: 0, cId: cId
+        });
+        saveAndRender();
+    }
+
+    function deleteSelected() {
+        if(!selectedUID) return;
+        if(confirm("Delete item?")) {
+            app.load = app.load.filter(i => i.uid !== selectedUID);
+            selectedUID = null;
+            document.getElementById('side-delete-wrapper').classList.add('hidden');
+            saveAndRender();
+        }
+    }
+
+    // --- EDIT LOGIC ---
+    function editCustomer(id) {
+        const c = app.customers.find(x => x.id === id);
+        if(!c) return;
+        document.getElementById('c-name').value = c.name;
+        editingCustId = id;
+        const btn = document.getElementById('btn-save-cust');
+        btn.innerText = "UPDATE"; btn.classList.replace('bg-green-500','bg-blue-600');
+        document.getElementById('btn-cancel-cust').classList.remove('hidden');
+    }
+    function cancelEditCust() {
+        editingCustId = null;
+        document.getElementById('c-name').value = "";
+        const btn = document.getElementById('btn-save-cust');
+        btn.innerText = "ADD CUSTOMER"; btn.classList.add('bg-green-500'); btn.classList.remove('bg-blue-600');
+        document.getElementById('btn-cancel-cust').classList.add('hidden');
+    }
+    function saveCustomer() {
+        const name = document.getElementById('c-name').value;
+        if(!name) return alert("Enter Name");
+        if (editingCustId) { app.customers.find(x => x.id === editingCustId).name = name; cancelEditCust(); } 
+        else { app.customers.push({id: Date.now(), name: name}); document.getElementById('c-name').value = ""; }
+        saveAndRender();
+    }
+
+    function editLibItem(id) {
+        const i = app.library.find(x => x.id === id);
+        if(!i) return;
+        document.getElementById('lib-name').value = i.name;
+        document.getElementById('lib-l').value = i.l;
+        document.getElementById('lib-w').value = i.w;
+        document.getElementById('lib-h').value = i.h;
+        document.getElementById('lib-color').value = i.color;
+        editingLibId = id;
+        const btn = document.getElementById('btn-save-lib');
+        btn.innerText = "UPDATE"; document.getElementById('btn-cancel-lib').classList.remove('hidden');
+    }
+    function cancelEditLib() {
+        editingLibId = null;
+        document.getElementById('lib-name').value = "";
+        document.getElementById('lib-l').value = "";
+        document.getElementById('lib-w').value = "";
+        document.getElementById('lib-h').value = "";
+        const btn = document.getElementById('btn-save-lib');
+        btn.innerText = "SAVE TEMPLATE"; document.getElementById('btn-cancel-lib').classList.add('hidden');
+    }
+    function saveLibItem() {
+        const name = document.getElementById('lib-name').value;
+        const l = Number(document.getElementById('lib-l').value);
+        const w = Number(document.getElementById('lib-w').value);
+        const h = Number(document.getElementById('lib-h').value);
+        const color = document.getElementById('lib-color').value;
+        if(!name || !l || !w || !h) return alert("Fill fields");
+        if(editingLibId) {
+            const item = app.library.find(x => x.id === editingLibId);
+            item.name = name; item.l = l; item.w = w; item.h = h; item.color = color;
+            cancelEditLib();
+        } else {
+            app.library.push({ id: Date.now(), name, l, w, h, color });
+            document.getElementById('lib-name').value = "";
+        }
+        saveAndRender();
+    }
+
+    function saveTrailer() {
+        const name = document.getElementById('t-name').value;
+        const l = Number(document.getElementById('t-l').value);
+        const w = Number(document.getElementById('t-w').value);
+        const h = Number(document.getElementById('t-h').value);
+        if(!name || !l || !w || !h) return alert("Fill fields");
+        app.trailers.push({ id: Date.now(), name: name, l: l*12, w: w*12, h: h*12 });
+        saveAndRender();
+    }
+
+    function deleteLib(id) { if(confirm("Delete?")) { app.library = app.library.filter(x => x.id !== id); saveAndRender(); } }
+    function deleteCust(id) { if(confirm("Delete?")) { app.customers = app.customers.filter(x => x.id !== id); saveAndRender(); } }
+    function deleteTrailer(id) { if(app.trailers.length > 1 && confirm("Delete?")) { app.trailers = app.trailers.filter(x => x.id !== id); saveAndRender(); } }
+    function selectTrailer(id) { app.activeTrailer = id; saveAndRender(); }
+
+    function saveAndRender() { saveData(); renderUI(); buildLoad3D(); }
+    function loadData() { const s = localStorage.getItem(KEY); if(s) try { app = JSON.parse(s); } catch(e){} }
+    function saveData() { localStorage.setItem(KEY, JSON.stringify(app)); }
+
+    function renderUI() {
+        document.getElementById('library-list').innerHTML = app.library.map(i => `
+            <div class="list-item" style="border-color:${i.color}">
+                <div><b>${i.name}</b><br><span class="text-xs text-gray-400">${i.l}x${i.w}x${i.h}"</span></div>
+                <div class="flex">
+                    <button class="small-action-btn bg-yellow-600" onclick="editLibItem(${i.id})">EDT</button>
+                    <button class="small-action-btn bg-red-600" onclick="deleteLib(${i.id})">DEL</button>
+                </div>
+            </div>`).join('');
+        document.getElementById('cust-list').innerHTML = app.customers.map(c => `
+            <div class="list-item">
+                <span class="font-bold text-lg">${c.name}</span>
+                <div class="flex">
+                    <button class="small-action-btn bg-yellow-600" onclick="editCustomer(${c.id})">EDT</button>
+                    <button class="small-action-btn bg-red-600" onclick="deleteCust(${c.id})">DEL</button>
+                </div>
+            </div>`).join('');
+        document.getElementById('trailer-list').innerHTML = app.trailers.map(t => `<div class="list-item ${t.id===app.activeTrailer?'border-white bg-gray-700':''}" onclick="selectTrailer(${t.id})"><div class="flex-1"><b>${t.name}</b></div><button class="small-action-btn bg-red-600" onclick="deleteTrailer(${t.id})">DEL</button></div>`).join('');
+        
+        const cSelect = document.getElementById('cust-select');
+        const iSelect = document.getElementById('item-select');
+        const oldC = cSelect.value; const oldI = iSelect.value;
+        cSelect.innerHTML = "<option>Customer...</option>" + app.customers.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        iSelect.innerHTML = "<option>Item...</option>" + app.library.map(i => `<option value="${i.id}">${i.name}</option>`).join('');
+        if(oldC) cSelect.value = oldC; if(oldI) iSelect.value = oldI;
+
+        const totalWt = app.load.reduce((s, i) => s + (i.wt || 0), 0);
+        document.getElementById('load-summary').innerText = `${app.load.length} items | ${totalWt.toLocaleString()} lbs`;
+    }
+
+    // --- IMPORT/EXPORT ---
+    function exportLoad() {
+        let name = prompt("File Name:", "Load_" + new Date().toISOString().slice(0,10));
+        if(!name) return;
+        const data = { load: app.load, trailers: app.trailers, activeTrailer: app.activeTrailer };
+        downloadJSON(data, name + ".json");
+    }
+
+    function exportCustomers() {
+        let name = prompt("File Name:", "Cust_Items_" + new Date().toISOString().slice(0,10));
+        if(!name) return;
+        const data = { customers: app.customers, library: app.library };
+        downloadJSON(data, name + ".json");
+    }
+
+    function downloadJSON(data, name) {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], {type:'application/json'}));
+        a.download = name; a.click();
+    }
+
+    function importData(input) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const json = JSON.parse(e.target.result);
+                if(json.customers && json.library) {
+                    json.customers.forEach(c => { if(!app.customers.some(x=>x.name===c.name)) app.customers.push(c); });
+                    json.library.forEach(i => { if(!app.library.some(x=>x.name===i.name)) app.library.push(i); });
+                    alert("Imported Cust & Items");
+                } 
+                else if(json.load) {
+                    if(confirm("Overwrite load?")) {
+                        app.load = json.load;
+                        if(json.trailers) app.trailers = json.trailers;
+                        if(json.activeTrailer) app.activeTrailer = json.activeTrailer;
+                    }
+                }
+                saveAndRender();
+            } catch(err) { alert("Invalid File"); }
+        };
+        if(input.files[0]) reader.readAsText(input.files[0]);
+        input.value = "";
+    }
+
+    // --- 3D ENGINE ---
+    function init3D() {
+        const c = document.getElementById('canvas-container');
+        scene = new THREE.Scene(); scene.background = new THREE.Color(0x000000);
+        camera = new THREE.PerspectiveCamera(50, c.clientWidth/c.clientHeight, 0.1, 1000);
+        camera.position.set(0, 30, 45);
+        renderer = new THREE.WebGLRenderer({antialias:true});
+        renderer.setSize(c.clientWidth, c.clientHeight);
+        c.appendChild(renderer.domElement);
+        
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const dir = new THREE.DirectionalLight(0xffffff, 0.8); dir.position.set(50,100,50); scene.add(dir);
+        scene.add(new THREE.GridHelper(100, 100, 0x444444, 0x222222));
+        
+        orbit = new THREE.OrbitControls(camera, renderer.domElement);
+        orbit.enableDamping = true; orbit.maxPolarAngle = Math.PI/2;
+        
+        // UX: Deselect if user moves camera (clicks background)
+        orbit.addEventListener('start', function() {
+            selectedUID = null;
+            document.getElementById('side-delete-wrapper').classList.add('hidden');
+            meshes.forEach(m => m.material.emissive.set(0x000000));
+        });
+        
+        buildTrailer3D(); buildLoad3D(); animate();
+        window.addEventListener('resize', trigger3DResize);
+    }
+
+    function buildTrailer3D() {
+        if(trailerMesh) scene.remove(trailerMesh);
+        if(floorMesh) scene.remove(floorMesh);
+        const t = app.trailers.find(x => x.id === app.activeTrailer);
+        
+        const geo = new THREE.BoxGeometry(t.l*SCALAR, t.h*SCALAR, t.w*SCALAR);
+        const edges = new THREE.EdgesGeometry(geo);
+        trailerMesh = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({color: 0x22c55e}));
+        trailerMesh.position.y = (t.h*SCALAR)/2;
+        scene.add(trailerMesh);
+        
+        const pGeo = new THREE.PlaneGeometry(t.l*SCALAR, t.w*SCALAR);
+        const pMat = new THREE.MeshBasicMaterial({color: 0x0f172a, side: THREE.DoubleSide});
+        floorMesh = new THREE.Mesh(pGeo, pMat);
+        floorMesh.rotation.x = -Math.PI/2; floorMesh.position.y = 0.05;
+        scene.add(floorMesh);
+    }
+
+    function buildLoad3D() {
+        meshes.forEach(m => scene.remove(m)); meshes = [];
+        if(dragControls) dragControls.dispose();
+        const t = app.trailers.find(x => x.id === app.activeTrailer);
+
+        app.load.forEach(item => {
+            const geo = new THREE.BoxGeometry(item.l*SCALAR, item.h*SCALAR, item.w*SCALAR);
+            
+            const custName = app.customers.find(c => c.id == item.cId)?.name || "Unk";
+            const canvas = document.createElement('canvas'); canvas.width=128; canvas.height=128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = item.color; ctx.fillRect(0,0,128,128);
+            ctx.fillStyle = 'black'; ctx.font = 'bold 20px Arial'; ctx.textAlign = 'center'; ctx.textBaseline='middle';
+            ctx.fillText(custName.substring(0,6), 64, 64);
+            ctx.lineWidth=5; ctx.strokeRect(0,0,128,128);
+            
+            const mat = new THREE.MeshLambertMaterial({
+                map: new THREE.CanvasTexture(canvas), 
+                polygonOffset:true, polygonOffsetFactor:1, polygonOffsetUnits:1
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            
+            const edges = new THREE.EdgesGeometry(geo);
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({color:0x000000}));
+            line.scale.set(1.005,1.005,1.005); line.raycast = function(){};
+            mesh.add(line);
+
+            mesh.position.set(
+                (item.x*SCALAR) - ((t.l*SCALAR)/2) + ((item.l*SCALAR)/2),
+                (item.y*SCALAR) + ((item.h*SCALAR)/2),
+                (item.z*SCALAR) - ((t.w*SCALAR)/2) + ((item.w*SCALAR)/2)
+            );
+            mesh.userData = {uid: item.uid};
+            scene.add(mesh); meshes.push(mesh);
+        });
+
+        dragControls = new THREE.DragControls(meshes, camera, renderer.domElement);
+        dragControls.addEventListener('dragstart', (e) => {
+            orbit.enabled = false; e.object.material.emissive.set(0x555555);
+            selectedUID = e.object.userData.uid;
+            const i = app.load.find(x => x.uid === selectedUID);
+            
+            document.getElementById('side-delete-wrapper').classList.remove('hidden');
+            document.getElementById('selected-label').innerText = i.name.substring(0,12);
+        });
+        
+        dragControls.addEventListener('drag', (e) => {
+            const m = e.object;
+            const i = app.load.find(x => x.uid === m.userData.uid);
+            
+            const hL=(t.l*SCALAR)/2; const hW=(t.w*SCALAR)/2;
+            if(m.position.x - (i.l*SCALAR)/2 < -hL) m.position.x = -hL + (i.l*SCALAR)/2;
+            if(m.position.x + (i.l*SCALAR)/2 > hL) m.position.x = hL - (i.l*SCALAR)/2;
+            if(m.position.z - (i.w*SCALAR)/2 < -hW) m.position.z = -hW + (i.w*SCALAR)/2;
+            if(m.position.z + (i.w*SCALAR)/2 > hW) m.position.z = hW - (i.w*SCALAR)/2;
+            if(m.position.y < (i.h*SCALAR)/2) m.position.y = (i.h*SCALAR)/2;
+            
+            i.x = (m.position.x + (t.l*SCALAR)/2 - (i.l*SCALAR)/2) / SCALAR;
+            i.y = (m.position.y - (i.h*SCALAR)/2) / SCALAR;
+            i.z = (m.position.z + (t.w*SCALAR)/2 - (i.w*SCALAR)/2) / SCALAR;
+        });
+
+        dragControls.addEventListener('dragend', (e) => {
+            orbit.enabled = true; e.object.material.emissive.set(0x000000);
+            const i = app.load.find(x => x.uid === e.object.userData.uid);
+            
+            i.x = Math.round(i.x/SNAP_GRID)*SNAP_GRID;
+            i.y = Math.round(i.y/SNAP_GRID)*SNAP_GRID;
+            i.z = Math.round(i.z/SNAP_GRID)*SNAP_GRID;
+            
+            app.load.forEach(o => {
+                if(o.uid === i.uid) return;
+                if(Math.abs(i.x - (o.x+o.l)) < SNAP_MAGNET) i.x = o.x+o.l;
+                if(Math.abs((i.x+i.l) - o.x) < SNAP_MAGNET) i.x = o.x-i.l;
+                if(Math.abs(i.z - (o.z+o.w)) < SNAP_MAGNET) i.z = o.z+o.w;
+                if(Math.abs((i.z+i.w) - o.z) < SNAP_MAGNET) i.z = o.z-i.w;
+                if(Math.abs(i.y - (o.y+o.h)) < SNAP_MAGNET) {
+                    if((i.x < o.x+o.l && i.x+i.l > o.x) && (i.z < o.z+o.w && i.z+i.w > o.z)) i.y = o.y+o.h;
+                }
+            });
+            saveAndRender();
+        });
+    }
+
+    function animate() { requestAnimationFrame(animate); orbit.update(); renderer.render(scene, camera); }
+    function trigger3DResize() {
+        const c = document.getElementById('canvas-container');
+        if(!c || c.clientHeight === 0) return;
+        camera.aspect = c.clientWidth/c.clientHeight;
+        camera.updateProjectionMatrix(); renderer.setSize(c.clientWidth, c.clientHeight);
+    }
+    function hardReset() { if(confirm("Reset?")) { localStorage.removeItem(KEY); location.reload(); } }
+</script>
+</body>
+</html>
