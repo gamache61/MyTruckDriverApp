@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Loadmaster 3D Max View</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/DragControls.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #111827; color: #f3f4f6; overflow: hidden; height: 100vh; margin: 0; }
+        .app-wrapper { display: flex; height: 100vh; width: 100vw; }
+        .sidebar { width: 120px; background: #1f2937; display: flex; flex-direction: column; padding: 10px; gap: 12px; flex-shrink: 0; border-right: 1px solid #374151; z-index: 10; }
+        .sidebar-right { border-left: 1px solid #374151; border-right: none; }
+        .main-content { flex: 1; display: flex; flex-direction: column; position: relative; background: #000; }
+        #canvas-container { flex-grow: 1; width: 100%; background: #000; overflow: hidden; position: relative; border-bottom: 2px solid #374151; }
+        .side-btn { padding: 15px 5px; font-size: 15px; font-weight: 700; text-align: center; border-radius: 8px; background: #374151; color: #9ca3af; cursor: pointer; border: 2px solid #4b5563; transition: 0.2s; line-height: 1.3; }
+        .side-btn.active-tab { background: #22c55e; color: #ffffff; border-color: #4ade80; }
+        .btn-teal { background: #0f766e; border-color: #14b8a6; color: white; }
+        .btn-indigo { background: #4338ca; border-color: #6366f1; color: white; }
+        .btn-blue { background: #1d4ed8; border-color: #3b82f6; color: white; }
+        .btn-red { background: #b91c1c; border-color: #ef4444; color: white; }
+        .bottom-panel { background: #1f2937; padding: 10px; border-top: 1px solid #374151; flex-shrink: 0; }
+        input, select { padding: 8px; margin: 2px 0; border: 1px solid #4b5563; border-radius: 6px; background: #374151; color: white; width: 100%; font-size: 14px; }
+        .action-btn { padding: 10px; border-radius: 6px; cursor: pointer; background: #10b981; color: white; font-weight: bold; width: 100%; border:none; }
+        .tab-content { display: none; height: 100%; flex-direction: column; }
+        .tab-content.active { display: flex; }
+        .scroll-area { flex: 1; overflow-y: auto; padding: 15px; }
+        .list-item { background: #111827; padding: 10px; margin-bottom: 8px; border-radius: 6px; border-left: 5px solid #34d399; display: flex; justify-content: space-between; align-items: center; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div class="app-wrapper">
+    <div class="sidebar">
+        <button class="side-btn active-tab" onclick="switchTab('main')">3D<br>PLAN</button>
+        <button class="side-btn" onclick="switchTab('customers')">CUST<br>LIST</button>
+        <button class="side-btn" onclick="switchTab('library')">ITEM<br>LIB</button>
+        <button class="side-btn" onclick="switchTab('trailers')">TRAIL<br>SIZE</button>
+    </div>
+
+    <div class="main-content">
+        <div id="main-tab" class="tab-content active">
+            <div id="canvas-container"></div>
+            <div class="bottom-panel">
+                <div class="flex gap-2 mb-2">
+                    <select id="cust-select" class="flex-1"><option>Customer...</option></select>
+                    <select id="item-select" class="flex-1"><option>Item...</option></select>
+                </div>
+                <div class="flex gap-2">
+                    <input type="number" id="load-wt" placeholder="Weight (lbs)" style="flex:1;">
+                    <button class="action-btn" style="flex:2;" onclick="addLoad()">+ ADD TO LOAD</button>
+                </div>
+                <div id="load-summary" class="mt-1 text-center text-xs text-gray-500">0 items | 0 lbs</div>
+            </div>
+        </div>
+        <div id="customers-tab" class="tab-content"><div class="bg-gray-800 p-4"><h2 class="text-xl font-bold text-green-500 mb-2">Customers</h2><input id="c-name" placeholder="Name" class="mb-2"><button onclick="saveCustomer()" class="action-btn">ADD CUSTOMER</button></div><div id="cust-list" class="scroll-area"></div></div>
+        <div id="library-tab" class="tab-content"><div class="bg-gray-800 p-4"><h2 class="text-xl font-bold text-green-500 mb-2">Item Library</h2><input id="lib-name" placeholder="Name" class="mb-2"><div class="flex gap-2 mb-2"><input type="number" id="lib-l" placeholder="L"><input type="number" id="lib-w" placeholder="W"><input type="number" id="lib-h" placeholder="H"></div><input type="color" id="lib-color" value="#22c55e" class="mb-2"><button onclick="saveLibItem()" class="action-btn">SAVE ITEM</button></div><div id="library-list" class="scroll-area"></div></div>
+        <div id="trailers-tab" class="tab-content"><div class="bg-gray-800 p-4"><h2 class="text-xl font-bold text-green-500 mb-2">Trailers</h2><input id="t-name" placeholder="Name" class="mb-2"><div class="flex gap-2 mb-2"><input type="number" id="t-l" placeholder="L (ft)"><input type="number" id="t-w" placeholder="W (in)"><input type="number" id="t-h" placeholder="H (in)"></div><button onclick="saveTrailer()" class="action-btn">ADD TRAILER</button></div><div id="trailer-list" class="scroll-area"></div></div>
+    </div>
+
+    <div class="sidebar sidebar-right">
+        <button class="side-btn btn-teal" onclick="exportLoad()">SAVE<br>LOAD</button>
+        <button class="side-btn btn-indigo" onclick="exportCustomers()">SAVE<br>CUST</button>
+        <input type="file" id="file-input" class="hidden" onchange="importData(this)">
+        <button class="side-btn btn-blue" onclick="document.getElementById('file-input').click()">IMPORT<br>FILE</button>
+        <div id="side-delete-wrapper" class="hidden mt-4 pt-4 border-t border-gray-600">
+            <button class="side-btn btn-red" onclick="deleteSelected()">DELETE<br>ITEM</button>
+        </div>
+        <div style="flex-grow:1"></div> <button class="side-btn btn-red" onclick="hardReset()">RESET<br>APP</button>
+    </div>
+</div>
+
+<script>
+    const STORAGE_KEY = "loadmaster_data_v1";
+    let app = { 
+        customers: [], 
+        library: [], 
+        trailers: [{id: 1, name: "Standard 53'", l: 636, w: 102, h: 110}], 
+        activeTrailer: 1, 
+        load: [] 
+    };
+    
+    let selectedUID = null, scene, camera, renderer, orbit, dragControls, meshes = [], loadItemGroups = [], trailerMesh;
+    const SCALAR = 0.05;
+
+    window.onload = () => {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                app = { ...app, ...parsed };
+            } catch(e) {
+                console.error("Error loading saved data", e);
+            }
+        }
+        
+        renderUI(); 
+        init3D();
+        
+        window.addEventListener('resize', onResize);
+        
+        window.addEventListener('beforeunload', saveToStorage);
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js').catch(err => console.log("SW failed", err
